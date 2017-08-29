@@ -116,7 +116,7 @@ class HandlebarsPlugin {
      * @param  {String} content     - file contents
      */
     registerGeneratedFile(filepath, content) {
-        this.assetsToEmit[path.basename(filepath)] = {
+        this.assetsToEmit[filepath] = {
             source: () => content,
             size: () => content.length
         };
@@ -145,28 +145,38 @@ class HandlebarsPlugin {
      * @param  {Function} done
      */
     compileAllEntryFiles(done) {
-        glob(this.options.entry, (err, entryFilesArray) => {
-            if (err) {
-                throw err;
-            }
-            if (entryFilesArray.length === 0) {
-                log(chalk.yellow(`no valid entry files found for ${this.options.entry} -- aborting`));
-                return;
-            }
-            entryFilesArray.forEach((filepath) => this.compileEntryFile(filepath));
-            // enforce new line after plugin has finished
+        const entry = this.options.entry;
+        if (typeof entry === "string") {
+            glob(this.options.entry, (err, entryFilesArray) => {
+                if (err) {
+                    throw err;
+                }
+                if (entryFilesArray.length === 0) {
+                    log(chalk.yellow(`no valid entry files found for ${this.options.entry} -- aborting`));
+                    return;
+                }
+                entryFilesArray.forEach((filepath) => this.compileEntryFile(filepath));
+                // enforce new line after plugin has finished
+                console.log();
+
+                done();
+            });
+        } else if (typeof entry === "object") {
+            Object.keys(entry).forEach(name => this.compileEntryFile(entry[name], name));
             console.log();
 
             done();
-        });
+        }
     }
 
     /**
      * Generates the html file for the given filepath
      * @param  {String} filepath    - filepath to handelebars template
      */
-    compileEntryFile(filepath) {
-        const targetFilepath = getTargetFilepath(filepath, this.options.output);
+    compileEntryFile(filepath, outputName) {
+        const targetFilepath = outputName
+              ? this.options.output.replace("[name]", outputName)
+              : getTargetFilepath(filepath, this.options.output);
         // fetch template content
         let templateContent = this.readFile(filepath, "utf-8");
         templateContent = this.options.onBeforeCompile(Handlebars, templateContent) || templateContent;
@@ -180,7 +190,7 @@ class HandlebarsPlugin {
         fs.outputFileSync(targetFilepath, result, "utf-8");
         this.options.onDone(Handlebars, targetFilepath);
         // notify webpack about newly filepath file (wds)
-        this.registerGeneratedFile(targetFilepath, result);
+        this.registerGeneratedFile(outputName + '.html', result);
 
         log(chalk.grey(`created output '${targetFilepath.replace(`${process.cwd()}/`, "")}'`));
     }
